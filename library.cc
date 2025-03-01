@@ -10,10 +10,9 @@ DWORD_PTR FindAttachListenerInit(HMODULE jvm_handle)
 {
 
     auto dos_header = reinterpret_cast<PIMAGE_DOS_HEADER>(jvm_handle);
-    auto signature = reinterpret_cast<PDWORD>(reinterpret_cast<PCHAR>(jvm_handle) + dos_header->e_lfanew);
-    auto nt_headers = reinterpret_cast<PIMAGE_NT_HEADERS>(signature);
+    auto nt_headers = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<PCHAR>(jvm_handle) + dos_header->e_lfanew);
 
-    PIMAGE_SECTION_HEADER section_header = reinterpret_cast<PIMAGE_SECTION_HEADER>(reinterpret_cast<PCHAR>(nt_headers) + sizeof(*nt_headers));
+    auto section_header = reinterpret_cast<PIMAGE_SECTION_HEADER>(reinterpret_cast<PCHAR>(nt_headers) + sizeof(*nt_headers));
     for (int i = 0; i < nt_headers->FileHeader.NumberOfSections; i++, section_header++)
     {
         if (std::memcmp(section_header->Name, ".text", 5) != 0)
@@ -104,9 +103,23 @@ DWORD_PTR FindAttachListenerInit(HMODULE jvm_handle)
 
 void Load(const HMODULE hModule)
 {
+    HMODULE jvm_handle = GetModuleHandle("jvm");
+    if (jvm_handle == nullptr)
+    {
+        std::cerr << "Couldn't get JVM handle!" << std::endl;
+        FreeLibraryAndExitThread(hModule, 0);
+    }
+    std::cout << "Got JVM handle: " << jvm_handle << std::endl;
+
     JavaVM *vm;
     jsize vm_count;
-    JNI_GetCreatedJavaVMs(&vm, 1, &vm_count);
+    auto GetCreatedJavaVMs = reinterpret_cast<void (*)(JavaVM **, jsize, jsize *)>(GetProcAddress(jvm_handle, "JNI_GetCreatedJavaVMs"));
+    if (GetCreatedJavaVMs == nullptr)
+    {
+        FreeLibraryAndExitThread(hModule, 0);
+    }
+    GetCreatedJavaVMs(&vm, 1, &vm_count);
+
     if (vm_count == 0)
     {
         std::cerr << "Couldn't find Java VM!" << std::endl;
@@ -123,9 +136,6 @@ void Load(const HMODULE hModule)
         std::cerr << "Failed to attach current thread: " << status << std::endl;
         FreeLibraryAndExitThread(hModule, 0);
     }
-
-    HMODULE jvm_handle = GetModuleHandle("jvm");
-    std::cout << "Got jvm handle: " << jvm_handle << std::endl;
 
     DWORD_PTR attach_listener_init_ptr = FindAttachListenerInit(jvm_handle);
     if (attach_listener_init_ptr == NULL)
