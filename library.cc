@@ -103,7 +103,7 @@ DWORD_PTR FindAttachListenerInit(HMODULE jvm_handle)
 
 void Load(const HMODULE hModule)
 {
-    HMODULE jvm_handle = GetModuleHandle("jvm");
+    HMODULE jvm_handle = GetModuleHandleA("jvm");
     if (jvm_handle == nullptr)
     {
         std::cerr << "Couldn't get JVM handle!" << std::endl;
